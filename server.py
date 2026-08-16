@@ -1,6 +1,7 @@
 import socket
 import threading
 
+from protocol import send_message, recv_message
 
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
@@ -18,12 +19,13 @@ print("Client address:", address)
 
 def receive_message():
     while True:
-        data = client.recv(1024)
+        message = recv_message(client)
 
-        if not data:
+        if message is None:
+            print("Client disconnected")
             break
 
-        print("Client:", data.decode())
+        print("Client:", message)
 
 #Create listening thread
 thread = threading.Thread(
@@ -43,7 +45,7 @@ while True:
     if message == "quit":
         break
 
-    client.send(message.encode())
+    send_message(client, message)
 
 
 client.close()

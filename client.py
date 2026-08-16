@@ -1,21 +1,27 @@
 import socket
 import threading
 
+from protocol import send_message, recv_message
+
 client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
 client.connect(("127.0.0.1", 9999))
 
 print("connected to server")
 
-def receive_message():
+def receive_message():  
     while True:
-        data = client.recv(1024)
+        message = recv_message(client)    
 
-        if not data: 
+        if message is None:
+            print("Server disconnected")
             break
 
-        print("Server said:", data.decode())
+        print("Server: ", message)
 
+
+
+       
 #! Creating the listening thread
 
 thread = threading.Thread(
@@ -32,7 +38,7 @@ while True:
         if message == "quit":
             break
 
-        client.send(message.encode())
+        send_message(client,message)
 
 
 client.close()
