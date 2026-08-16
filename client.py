@@ -1,4 +1,5 @@
 import socket
+import threading
 
 client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
@@ -6,19 +7,32 @@ client.connect(("127.0.0.1", 9999))
 
 print("connected to server")
 
-# client.send(b"Hello world!")
+def receive_message():
+    while True:
+        data = client.recv(1024)
 
+        if not data: 
+            break
+
+        print("Server said:", data.decode())
+
+#! Creating the listening thread
+
+thread = threading.Thread(
+     target = receive_message,
+     daemon = True
+)
+
+thread.start()
+
+# Main thread handles typing and sending
 while True:
-    data = client.recv(1024)
+        message = input("Client: ")
 
-    if not data: 
-        break
+        if message == "quit":
+            break
 
-    print("Server said:", data.decode())
+        client.send(message.encode())
 
-    #client typs and send
-
-    message = input("Client: ")
-    client.send(message.encode())
 
 client.close()
