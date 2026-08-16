@@ -30,11 +30,11 @@ def recv_message(sock):
 
         header += chunk
 
-        #convert the 4 bytes back to integer unpack
-        length = struct.unpack("!I", header)[0]
+    #convert the 4 bytes back to integer unpack
+    length = struct.unpack("!I", header)[0]
 
-        #Receve the actual meaasge
-        data = b""
+    #Receve the actual meaasge
+    data = b""
 
     while len(data) < length:
         chunk = sock.recv(length - len(data))
@@ -44,6 +44,5 @@ def recv_message(sock):
 
         data += chunk
 
-        #convert bytes back to str
-
-        return data.decode()
+    #convert bytes back to str
+    return data.decode()
