@@ -1,6 +1,8 @@
 import socket
 import threading
+import sys
 
+from nacl.public import PrivateKey, PublicKey, Box
 from protocol import recv_message, send_message
 
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -15,16 +17,49 @@ client, address = server.accept() # wont continue unless client connect to it
 
 print("Client address:", address)
 
+# !Key change 
+
+#Generate server key pair
+server_private = PrivateKey.generate()
+server_public = server_private.public_key
+
+#?Server receives client private key first before client get server public key
+client_public_bytes = recv_message(client)
+
+if client_public_bytes is None:
+    print("Client disconnected during public private handshake")
+    client.close()
+    server.close()
+    sys.exit()
+
+# Convert bytes back into a PublicKey object
+client_public = PublicKey(client_public_bytes)
+
+#* server send ist public key
+
+send_message(client, bytes(server_public))
+
+#The box
+
+box = Box(server_private, client_public)
+
+print("Secure connection established!")
+
+
+
 
 def receive_message():
     while True:
-        message = recv_message(client)
+        data = recv_message(client)
 
-        if message is None:
+        if data is None:
             print("Client disconnected")
             break
+        #decrypt encrypted bytes
+        decrypt = box.decrypt(data)
 
-        message = message.decode() #? 4. decode the message you get before printing
+        # Convert plaintext bytes to string
+        message = decrypt.decode() #? 4. decode the message you get before printing
         print("Client:", message)
 
 #Create listening thread
@@ -37,7 +72,7 @@ thread.start()
 
 
 
-#main thread for handling typing ans sending
+#? main thread for handling typing ans sending
 
 
 while True:
@@ -45,10 +80,17 @@ while True:
     if message == "quit":
         break
 
-
+    #string to bytes
     data = message.encode() #? 2. Encode the message
-    send_message(client, data) #? 3. Send the encoded message/data
 
+    #Encrypt the bytes
+    encrypted = box.encrypt(data)
+
+
+    # Send encrypted bytes through framing
+    send_message(client, encrypted) #? 3. Send the encoded message/data
+    print(encrypted)
+    print(data)
 
 client.close()
 server.close()
