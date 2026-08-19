@@ -1,8 +1,6 @@
 import struct
 
-def send_message(sock, text):
-    #converting string to bytes
-    data = text.encode()
+def send_message(sock, data):
 
     #get no of length of data
     length = len(data)
@@ -45,4 +43,4 @@ def recv_message(sock):
         data += chunk
 
     #convert bytes back to str
-    return data.decode()
+    return data

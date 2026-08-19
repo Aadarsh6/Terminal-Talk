@@ -1,7 +1,7 @@
 import socket
 import threading
 
-from protocol import send_message, recv_message
+from protocol import recv_message, send_message
 
 client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
@@ -16,7 +16,7 @@ def receive_message():
         if message is None:
             print("Server disconnected")
             break
-
+        message = message.decode()
         print("Server: ", message)
 
 
@@ -38,7 +38,9 @@ while True:
         if message == "quit":
             break
 
-        send_message(client,message)
+        data = message.encode()
+
+        send_message(client, data)
 
 
 client.close()

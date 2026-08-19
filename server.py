@@ -1,7 +1,7 @@
 import socket
 import threading
 
-from protocol import send_message, recv_message
+from protocol import recv_message, send_message
 
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
@@ -10,9 +10,8 @@ server.listen()
 
 print("Server is waiting for a connection...")
 
+client, address = server.accept() # wont continue unless client connect to it
 
-#! "I won't continue until somebody connects to me.
-client, address = server.accept()
 
 print("Client address:", address)
 
@@ -25,6 +24,7 @@ def receive_message():
             print("Client disconnected")
             break
 
+        message = message.decode() #? 4. decode the message you get before printing
         print("Client:", message)
 
 #Create listening thread
@@ -41,11 +41,13 @@ thread.start()
 
 
 while True:
-    message = input("Server: ")
+    message = input("Server: ") #? 1. Take the message
     if message == "quit":
         break
 
-    send_message(client, message)
+
+    data = message.encode() #? 2. Encode the message
+    send_message(client, data) #? 3. Send the encoded message/data
 
 
 client.close()
