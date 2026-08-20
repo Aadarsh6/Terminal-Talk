@@ -5,7 +5,9 @@ import hashlib
 
 from nacl.public import PrivateKey, PublicKey, Box
 from protocol import recv_message, send_message
-from indentity import load_or_create_key
+from identity import load_or_create_key
+
+
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
 server.bind(("127.0.0.1", 9999))

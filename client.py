@@ -5,7 +5,7 @@ import hashlib
 
 from nacl.public import PublicKey, Box
 from protocol import recv_message, send_message
-from indentity import load_or_create_key
+from identity import load_or_create_key
 
 client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 

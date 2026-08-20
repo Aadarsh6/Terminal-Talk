@@ -1,0 +1,10 @@
+Client fingerprint:  b27d:c404:1f56:3c7b:fba7:02e4:50b9:a64b:1336:2354:a37a:fc3f:5947:c3d8:4765:c0b3
+Fingerprint: b27d:c404:1f56:3c7b:fba7:02e4:50b9:a64b:1336:2354:a37a:fc3f:5947:c3d8:4765:c0b3 - Confirm thi
+server
+
+b27d:c404:1f56:3c7b:fba7:02e4:50b9:a64b:1336:2354:a37a:fc3f:5947:c3d8:4765:c0b3
+Fingerprint: b27d:c404:1f56:3c7b:fba7:02e4:50b9:a64b:1336:2354:a37a:fc3f:5947:c3d8:4765:c0b3
+
+
+Server fingerprint:  c849:a2b7:460a:13c0:cde3:05d6:d5d0:d978:70f7:a663:d600:d73c:30a4:2b57:b34c:8cc8
+Fingerprint:c849:a2b7:460a:13c0:cde3:05d6:d5d0:d978:70f7:a663:d600:d73c:30a4:2b57:b34c:8cc8 - confirm this
