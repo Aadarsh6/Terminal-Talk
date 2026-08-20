@@ -6,6 +6,7 @@ import hashlib
 from nacl.public import PublicKey, Box
 from protocol import recv_message, send_message
 from identity import load_or_create_key
+from storage import init_db, save_message, load_messages
 
 client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
@@ -56,6 +57,18 @@ if confirmation.lower() != "yes":
     print("Fingerprint not verified closing connection")
     client.close()
     sys.exit()
+
+db_filename = "Client_history.db"
+
+init_db(db_filename, fingerprint)
+
+messages = load_messages(direction, text, timestamp):
+for direction, text, timestamp in messages:
+    if direction == "sent":
+        print(f"You:{text}")
+    else:
+        print(f"Server{text}")
+
 
 print("Secure connection established!")
 
