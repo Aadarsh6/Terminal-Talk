@@ -1,2 +1,2 @@
-client_key.bin
-server_key.bin
+*.db
+*.bin

@@ -97,6 +97,12 @@ def receive_message():
 
         # Convert plaintext bytes to string
         message = decrypt.decode() #? 4. decode the message you get before printing
+        save_message(
+            db_filename,
+            fingerprint,
+            "received",
+            message
+        )
         print("Client:", message)
 
 #Create listening thread
@@ -126,8 +132,14 @@ while True:
 
     # Send encrypted bytes through framing
     send_message(client, encrypted) #? 3. Send the encoded message/data
-    # print(encrypted)
-    # print(data)
+
+    save_message(
+        db_filename,
+        fingerprint,
+        "sent",
+        message
+    )
+
 
 client.close()
 server.close()

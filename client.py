@@ -60,14 +60,14 @@ if confirmation.lower() != "yes":
 
 db_filename = "Client_history.db"
 
-init_db(db_filename, fingerprint)
+init_db(db_filename)
 
-messages = load_messages(direction, text, timestamp):
+messages = load_messages(db_filename, fingerprint)
 for direction, text, timestamp in messages:
     if direction == "sent":
-        print(f"You:{text}")
+        print(f"You: {text}")
     else:
-        print(f"Server{text}")
+        print(f"Server: {text}")
 
 
 print("Secure connection established!")
@@ -88,6 +88,12 @@ def receive_message():
 
         # convert pliantext bytes to string
         message = decrypted.decode()
+        save_message(
+            db_filename,
+            fingerprint,
+            "received",
+            message 
+        )
         print("Server: ", message)
 
 
@@ -115,8 +121,11 @@ while True:
 
         # Send encrypted bytes through framing
         send_message(client, encrypted)
-        # print(encrypted)
-        # print(data)
-
+        save_message(
+            db_filename,
+            fingerprint,
+            "sent",
+            message
+        )
 
 client.close()
