@@ -1,10 +1,11 @@
 import socket
 import threading
 import sys
+import hashlib
 
 from nacl.public import PrivateKey, PublicKey, Box
 from protocol import recv_message, send_message
-
+from indentity import load_or_create_key
 server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
 server.bind(("127.0.0.1", 9999))
@@ -20,7 +21,7 @@ print("Client address:", address)
 # !Key change 
 
 #Generate server key pair
-server_private = PrivateKey.generate()
+server_private = load_or_create_key("server_key.bin")
 server_public = server_private.public_key
 
 #?Server receives client private key first before client get server public key
@@ -42,6 +43,29 @@ send_message(client, bytes(server_public))
 #The box
 
 box = Box(server_private, client_public)
+
+# !Creating fingerprint of clients public key
+fingerprint = hashlib.sha256(client_public_bytes).hexdigest()
+
+# Group into 4 character chunks
+
+fingerprint = ":".join(
+    fingerprint[i:i + 4]
+    for i in range(0, len(fingerprint), 4)
+)
+print("Client fingerprint: ", fingerprint)
+
+confirmation = input(
+    f"Fingerprint: {fingerprint} - Confirm this matches (yes/no): "
+)
+
+if confirmation.lower() != "yes":
+
+    print("Fingerprint not verified closing the connection.")
+    client.close()
+    server.close()
+    sys.exit()
+
 
 print("Secure connection established!")
 
@@ -89,8 +113,8 @@ while True:
 
     # Send encrypted bytes through framing
     send_message(client, encrypted) #? 3. Send the encoded message/data
-    print(encrypted)
-    print(data)
+    # print(encrypted)
+    # print(data)
 
 client.close()
 server.close()
