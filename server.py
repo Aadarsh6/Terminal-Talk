@@ -78,7 +78,7 @@ for direction, text, timestamp in messages:
     if direction == "sent":
         print(f"You: {text}")
     else:
-        print(f"Client: {text}")
+        print(f"Them: {text}")
 
 print("Secure connection established!")
 
