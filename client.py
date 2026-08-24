@@ -4,8 +4,9 @@ import sys
 import hashlib
 
 from nacl.public import PublicKey, Box
+from nacl.secret import SecretBox
 from protocol import recv_message, send_message
-from identity import load_or_create_key
+from identity import load_or_create_key, load_or_create_secret_key
 from storage import init_db, save_message, load_messages
 
 client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -58,11 +59,17 @@ if confirmation.lower() != "yes":
     client.close()
     sys.exit()
 
+#local database encryption
+storage_key = load_or_create_secret_key(
+    "client_storage_key.bon"
+    )
+Secret_box = SecretBox(storage_key)
+
 db_filename = "Client_history.db"
 
 init_db(db_filename)
 
-messages = load_messages(db_filename, fingerprint)
+messages = load_messages(db_filename, fingerprint, Secret_box)
 for direction, text, timestamp in messages:
     if direction == "sent":
         print(f"You: {text}")
@@ -92,7 +99,8 @@ def receive_message():
             db_filename,
             fingerprint,
             "received",
-            message 
+            message, 
+            Secret_box
         )
         print("Server: ", message)
 
@@ -125,7 +133,8 @@ while True:
             db_filename,
             fingerprint,
             "sent",
-            message
+            message,
+            Secret_box
         )
 
 client.close()

@@ -15,23 +15,25 @@ def init_db(filename):
     connection.commit()
     connection.close()
 
-def save_message(filename, fingerprint, direction, text):
+def save_message(filename, fingerprint, direction, text, box):
     connection = sqlite3.connect(filename)
+
+    encrypted = box.encrypt(text.encode())
 
     connection.execute(
         """
         INSERT INTO messages (fingerprint, direction, text)
         VALUES(?, ?, ?)
         """,
-        (fingerprint, direction, text)
+        (fingerprint, direction, encrypted)
     )
     connection.commit()
     connection.close()
 
-def load_messages(filename, fingerprint):
+def load_messages(filename, fingerprint, box):
     connection = sqlite3.connect(filename)
 
-    result = connection.execute(
+    cursor = connection.execute(
         """
         SELECT direction, text, timestamp
         FROM messages
@@ -40,8 +42,17 @@ def load_messages(filename, fingerprint):
         """,
         (fingerprint,)
     )
-    messages = result.fetchall()
+    rows = cursor.fetchall()
     connection.close()
+    messages = []
+
+    for direction, encrypted_text, timestamp in rows:
+        text = box.decrypt(encrypted_text).decode()
+
+        messages.append(
+            (direction, text, timestamp)
+        )
+
 
     return messages
 
@@ -52,18 +63,18 @@ def load_messages(filename, fingerprint):
 
 # ! for test
 
-if __name__ == "__main__":
-    db = "test_history.db"
+# if __name__ == "__main__":
+#     db = "test_history.db"
 
-    fingerprint = "A1B2:C3D4:E5F6"
+#     fingerprint = "A1B2:C3D4:E5F6"
 
-    init_db(db)
+#     init_db(db)
 
-    save_message(db, fingerprint, "sent", "Hello!")
-    save_message(db, fingerprint, "received", "Hey!")
-    save_message(db, fingerprint, "sent", "How are you?")
+#     save_message(db, fingerprint, "sent", "Hello!")
+#     save_message(db, fingerprint, "received", "Hey!")
+#     save_message(db, fingerprint, "sent", "How are you?")
 
-    messages = load_messages(db, fingerprint)
+#     messages = load_messages(db, fingerprint)
 
-    for message in messages:
-        print(message)
+#     for message in messages:
+#         print(message)
