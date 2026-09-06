@@ -65,7 +65,7 @@ storage_key = load_or_create_secret_key(
     )
 Secret_box = SecretBox(storage_key)
 
-db_filename = "Client_history.db"
+db_filename = "client_history.db"
 
 init_db(db_filename)
 
