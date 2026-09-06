@@ -61,7 +61,7 @@ if confirmation.lower() != "yes":
 
 #local database encryption
 storage_key = load_or_create_secret_key(
-    "client_storage_key.bon"
+    "client_storage_key.bin"
     )
 Secret_box = SecretBox(storage_key)
 
