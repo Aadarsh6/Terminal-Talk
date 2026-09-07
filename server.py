@@ -27,7 +27,6 @@ print("Client address:", address)
 server_private = load_or_create_key("server_key.bin")
 server_public = server_private.public_key
 
-#?Server receives client private key first before client get server public key
 client_public_bytes = recv_message(client)
 
 if client_public_bytes is None:
@@ -71,7 +70,7 @@ if confirmation.lower() != "yes":
 
 #local database encryption
 storage_key = load_or_create_secret_key(
-    "Server_storage_key.bin"
+    "server_storage_key.bin"
     )
 Secret_box = SecretBox(storage_key)
 

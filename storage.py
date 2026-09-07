@@ -38,7 +38,7 @@ def load_messages(filename, fingerprint, box):
         SELECT direction, text, timestamp
         FROM messages
         WHERE fingerprint = ?
-        ORDER BY timestamp
+        ORDER BY id
         """,
         (fingerprint,)
     )
