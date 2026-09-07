@@ -9,12 +9,12 @@ from identity import load_or_create_key, load_or_create_secret_key
 from storage import init_db, save_message, load_messages
 
 host = sys.argv[1] if len(sys.argv) > 1 else"127.0.0.1"
-port = int(sys.argv[0]) if len(sys.argv) > 2 else 9999
+port = int(sys.argv[2]) if len(sys.argv) > 2 else 9999
 
 client = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 client.connect((host, port))
 
-print(f"Connected to server at ${host}:${port}")
+print(f"Connected to server at {host}:{port}")
 
 
 
@@ -62,7 +62,7 @@ print("Server fingerprint: ", fingerprint)
 confirmation = input(f"Fingerprint:{fingerprint} - confirm this matches (yes/no):"
 )
 
-if confirmation.lower() != "yes":
+if confirmation.lower() not in ("yes", "y"):
     print("Fingerprint not verified closing connection")
     client.close()
     sys.exit()

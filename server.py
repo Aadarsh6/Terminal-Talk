@@ -80,7 +80,7 @@ confirmation = input(
     f"Fingerprint: {fingerprint} - Confirm this matches (yes/no): "
 )
 
-if confirmation.lower() != "yes":
+if confirmation.lower() not in ( "yes", "y"):
 
     print("Fingerprint not verified closing the connection.")
     client.close()
