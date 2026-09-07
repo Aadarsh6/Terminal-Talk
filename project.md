@@ -481,3 +481,13 @@ The blog should document failures honestly. If NAT traversal fails, that result 
 > **Understand the layer before abstracting it away.**
 
 The point is not to reinvent production-grade messaging software. The point is to understand what TCP actually gives you, what it does not give you, how applications create protocols, how cryptographic identity works, how persistence changes application design, how peers discover each other, why NAT makes P2P difficult, where relays become necessary, and what security guarantees the implementation actually provides.
+
+# LOGS
+M12 — LAN connectivity — COMPLETE
+Pre-flight (same machine via LAN IP): three failures logged — wrongtarget IP (10060), strict fingerprint gate rejecting "y" (fixed withfail-closed allowlist), storage-key orphaning after cleanup (recoveredby restoring original key file; hazard §11 confirmed in practice).
+
+Two-machine run:
+
+TcpTestSucceeded : True on first attempt (firewall already permissiveon Private profile)
+First attempt with python failed: PC B ran a stale pre-LAN client.pyfrom an old GitHub push (version skew). Fixed by copying currentfiles. Lesson: push after every milestone.
+Result: bidirectional encrypted chat between two physical laptops;fingerprint compared across screens (out-of-band); disconnect →reconnect → history reloaded on both machines. Recorded on video.
