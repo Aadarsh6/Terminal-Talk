@@ -225,7 +225,7 @@ def find_mode(peer_id, rv_host):
 
 
 
-def listen_mode(port, name):
+def listen_mode(port, name, rv_host=None):
     private_key = load_or_create_key(f"{name}_key.bin")
     own_fp = format_fingerprint(bytes(private_key.public_key))
 
@@ -236,6 +236,17 @@ def listen_mode(port, name):
     print("Your fingerprint:", own_fp)
     print(f"Listening on 0.0.0.0:{port}")
     print(f"Other peer connects with: python peer.py connect {get_lan_ip()} {port} <their-name>")
+
+    if rv_host:
+        # discovery is optional infrastructure: if it's down, chat still works
+        resp = rendezvous_register(private_key, name, port, rv_host)
+        print(f"[rendezvous] registered — discoverable as '{name}'") if resp \
+            else print("[rendezvous] registration failed (continuing without discovery)")
+        threading.Thread(
+            target=rendezvous_refresh_loop,
+            args=(private_key, name, port, rv_host),
+            daemon=True,
+        ).start()
 
     sock, address = server.accept()
     server.close()   # one session per run in V1; accept-loop is V2
@@ -276,12 +287,14 @@ def main():
         print("usage:")
         print("  python peer.py listen [port] [name]")
         print("  python peer.py connect <host> [port] [name]")
+        print(" python peer.py find <peer_id> [rendezvous_host]")
         sys.exit(1)
 
     if sys.argv[1] == "listen":
         port = int(sys.argv[2]) if len(sys.argv) > 2 else 9999
         name = sys.argv[3] if len(sys.argv) > 3 else "peer"
-        listen_mode(port, name)
+        rv_host = sys.argv[4] if len(sys.argv) > 4 else None
+        listen_mode(port, name, rv_host)
     elif sys.argv[1] == "connect":
         if len(sys.argv) < 3:
             print("connect requires a host")
@@ -290,6 +303,11 @@ def main():
         port = int(sys.argv[3]) if len(sys.argv) > 3 else 9999
         name = sys.argv[4] if len(sys.argv) > 4 else "peer"
         connect_mode(host, port, name)
+    elif sys.argv[1] == "find":
+        if len(sys.argv) < 3:
+            print("find requires a peer id")
+            sys.exit(1)
+        find_mode(sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else "127.0.0.1")
     else:
         print("unknown mode:", sys.argv[1])
         sys.exit(1)
