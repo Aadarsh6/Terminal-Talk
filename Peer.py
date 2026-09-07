@@ -81,6 +81,52 @@ def chat(sock, box, peer_fp, name):
         while True:
             data = recv_message(sock)
             if data is None:
+                if connected:   # announce only if WE didn't initiate the close
+                    print("\nPeer disconnected.")
+                connected = False
+                break
+            try:
+                message = box.decrypt(data).decode()
+            except Exception:
+                print("\nReceived an undecryptable frame — ignored.")
+                continue
+            save_message(db_filename, peer_fp, "received", message, secret_box)
+            print("Them:", message)
+
+    receiver = threading.Thread(target=receive_loop, daemon=True)
+    receiver.start()
+
+    while connected:
+        try:
+            message = input(f"{name}: ")
+        except KeyboardInterrupt:
+            break
+        if not connected:
+            print("Peer is gone.")
+            break
+        if message == "quit":
+            break
+        try:
+            send_message(sock, box.encrypt(message.encode()))
+        except OSError:
+            print("Peer is gone.")
+            break
+        save_message(db_filename, peer_fp, "sent", message, secret_box)
+
+    # Leaving: mark closed first so the receive thread doesn't announce
+    # a phantom "Peer disconnected." caused by our own socket close.
+    # Then wait for it to finish its last print — a daemon thread killed
+    # mid-print at interpreter shutdown can deadlock stdout and crash
+    # with _enter_buffered_busy.
+    connected = False
+    sock.close()
+    receiver.join(timeout=2)
+
+    def receive_loop():
+        nonlocal connected
+        while True:
+            data = recv_message(sock)
+            if data is None:
                 print("\nPeer disconnected.")
                 connected = False
                 break
