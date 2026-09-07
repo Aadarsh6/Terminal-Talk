@@ -505,3 +505,7 @@ What we chose: role dispatch in main() with one shared body; ahandshake initiato
 Why: the initiator flag keeps downstream logic fully symmetric; theconnected flag closes deferred issue #2 — BrokenPipeError becomes aclean "Peer is gone."
 
 Result: same-machine and two-physical-machine chat pass; identity andhistory continuity verified via old names (listener fingerprintc849:a2b7:... identical to the server.py era); role reversal verified.Kill test finding: Ctrl+C on Windows kills the peer with a TCP RST(not FIN), so the receiver's recv() raised ConnectionResetError[10054] and crashed the receive thread before it could set theconnected flag; the send-side OSError handler caught the death, butthe exit was ugly. Fix: recv_message() now treats OSError as EOF —one failure convention for all callers. Re-tested: cleanannouncement, no traceback. client.py / server.py removed from theworking tree, preserved in git history.
+
+Second shutdown finding: clean EOF detection worked, but a local quitcrashed at interpreter shutdown with "Fatal Python error:_enter_buffered_busy" — the daemon receive thread was killed mid-printholding the stdout lock during finalization. Fix: main thread setsconnected=False before closing (suppressing a phantom "Peerdisconnected." announcement caused by our own socket close) and joinsthe receive thread with a 2s timeout before exiting; daemon flag keptas a hang safety net.
+
+Three distinct bugs found by two tests — RST handling, phantom EOF, shutdown race. That's the M13 log now earning its keep.
