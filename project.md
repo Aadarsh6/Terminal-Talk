@@ -483,7 +483,8 @@ The blog should document failures honestly. If NAT traversal fails, that result 
 The point is not to reinvent production-grade messaging software. The point is to understand what TCP actually gives you, what it does not give you, how applications create protocols, how cryptographic identity works, how persistence changes application design, how peers discover each other, why NAT makes P2P difficult, where relays become necessary, and what security guarantees the implementation actually provides.
 
 # LOGS
-M12 — LAN connectivity — COMPLETE
+
+# **M12 — LAN connectivity — COMPLETE**
 Pre-flight (same machine via LAN IP): three failures logged — wrongtarget IP (10060), strict fingerprint gate rejecting "y" (fixed withfail-closed allowlist), storage-key orphaning after cleanup (recoveredby restoring original key file; hazard §11 confirmed in practice).
 
 Two-machine run:
@@ -493,19 +494,8 @@ First attempt with python failed: PC B ran a stale pre-LAN client.pyfrom an old 
 Result: bidirectional encrypted chat between two physical laptops;fingerprint compared across screens (out-of-band); disconnect →reconnect → history reloaded on both machines. Recorded on video.
 
 
-§3 Repository layout — replace the client/server lines:
+# **M13 — peer.py unified refactor**
 
-p2p-chat/├── peer.py # unified peer: listen + connect modes├── protocol.py # length-prefixed framing├── identity.py # persistent transport + storage keys├── storage.py # encrypted SQLite history├── rendezvous_server.py # discovery/signaling prototype (port 7000)├── rendezvous_test.py # prototype test client├── crypto_test.py # manual crypto sanity check├── tests/ # automated tests (growing)├── README.md # written at V1├── project.md # this document└── .gitignore
-
-client.py / server.py removed in M13 — preserved in git history.
-
-§6 Deferred issues table — update the row that just fired:
-
-| Receive thread can't notify send loop of death | — | peer.py refactor | ✅ FIXED in M13 (connected flag) |
-
-§14 Milestone log — add after M12:
-
-M13 — peer.py unified refactor
 What we built: One peer.py replacing client.py and server.py. Role isa parameter, not a file: python peer.py listen <port> <name> /python peer.py connect <host> <port> <name>. The name selects theidentity (_key.bin, _history.db) — passing "server"/"client" preserves existing identities and history.
 
 Why we needed it: client.py and server.py were ~90% identical codediverging over time; every fix had to be applied twice (the $ f-stringbug and the "y" fingerprint gate both had to be checked in bothfiles). A P2P peer must both listen and connect — the split was anartifact of the learning path, not the architecture.
@@ -514,13 +504,4 @@ What we chose: role dispatch in main() with one shared body; ahandshake initiato
 
 Why: the initiator flag keeps downstream logic fully symmetric; theconnected flag closes deferred issue #2 — BrokenPipeError becomes aclean "Peer is gone."
 
-Result: same-machine and two-physical-machine chat pass; identity andhistory continuity verified via old names; role reversal and kill testverified single-machine (peer disconnected cleanly, no traceback).client.py / server.py removed from the working tree, preserved in githistory.
-
-(Adjust the Result line if any of the three checks fail — that's the point of the log.)
-
-§9 V1 checklist — tick:
-
- peer.py unified peer (listen/connect/send/receive), sharedfingerprint helper, minimal connected death detection
-§15 Status table:
-
-| peer.py refactor | DONE || Connection state (minimal flag) | DONE |
+Result: same-machine and two-physical-machine chat pass; identity andhistory continuity verified via old names (listener fingerprintc849:a2b7:... identical to the server.py era); role reversal verified.Kill test finding: Ctrl+C on Windows kills the peer with a TCP RST(not FIN), so the receiver's recv() raised ConnectionResetError[10054] and crashed the receive thread before it could set theconnected flag; the send-side OSError handler caught the death, butthe exit was ugly. Fix: recv_message() now treats OSError as EOF —one failure convention for all callers. Re-tested: cleanannouncement, no traceback. client.py / server.py removed from theworking tree, preserved in git history.
