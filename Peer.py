@@ -4,13 +4,14 @@ import socket
 import threading
 import sys
 import hashlib
-
 from nacl.public import PrivateKey, PublicKey, Box
 from nacl.secret import SecretBox
 from protocol import recv_message, send_message
 from identity import load_or_create_key, load_or_create_secret_key
 from storage import init_db, save_message, load_messages
-
+import json
+import base64
+import time
 
 def get_lan_ip():
     s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  #!OS-side route lookup only
@@ -158,6 +159,70 @@ def chat(sock, box, peer_fp, name):
         save_message(db_filename, peer_fp, "sent", message, secret_box)
 
     sock.close()
+
+RENDEZVOUS_PORT = 7000
+RENDEZVOUS_REFRESH = 30  # server TTL is 90s; refresh at 1/3 of TTL
+
+
+def rendezvous_register(private_key, name, listen_port, rv_host):
+    """One registration attempt. Returns response dict or None."""
+    request = {
+        "type": "register",
+        "id": name,
+        "listen_port": listen_port,
+        "public_key": base64.b64encode(bytes(private_key.public_key)).decode(),
+    }
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(5)
+        sock.connect((rv_host, RENDEZVOUS_PORT))
+        send_message(sock, json.dumps(request).encode())
+        resp = recv_message(sock)
+        sock.close()
+        return json.loads(resp.decode()) if resp else None
+    except OSError:
+        return None
+
+
+def rendezvous_refresh_loop(private_key, name, listen_port, rv_host):
+    while True:
+        time.sleep(RENDEZVOUS_REFRESH)
+        if rendezvous_register(private_key, name, listen_port, rv_host) is None:
+            print("[rendezvous] refresh failed — will retry")
+
+
+def find_mode(peer_id, rv_host):
+    request = {"type": "lookup", "id": peer_id}
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(5)
+        sock.connect((rv_host, RENDEZVOUS_PORT))
+        send_message(sock, json.dumps(request).encode())
+        resp = recv_message(sock)
+        sock.close()
+    except OSError:
+        print(f"Rendezvous server at {rv_host}:{RENDEZVOUS_PORT} unreachable")
+        return
+
+    if resp is None:
+        print("Rendezvous server closed the connection")
+        return
+
+    try:
+        result = json.loads(resp.decode())
+    except (UnicodeDecodeError, json.JSONDecodeError):
+        print("Rendezvous sent a malformed response")
+        return
+
+    if result.get("status") == "found":
+        print(f"Peer '{peer_id}' is at {result['ip']}:{result['port']}")
+        print(f"Fingerprint: {result['fingerprint']}")
+        print("Verify this fingerprint with the peer out-of-band, then:")
+        print(f"  python peer.py connect {result['ip']} {result['port']} <your-name>")
+    else:
+        print(f"'{peer_id}' not found (never registered, or entry expired)")
+
+
 
 
 def listen_mode(port, name):
