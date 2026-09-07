@@ -9,23 +9,42 @@ from protocol import recv_message, send_message
 from identity import load_or_create_key, load_or_create_secret_key
 from storage import init_db, save_message, load_messages
 
-server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+def get_lan_ip():
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)  #!OS-side route lookup only
+# !It's only a clever way to ask the operating system:
+# !"Which network interface/IP would you use to reach this outside address?"
+    try:
+        # *8.8.8.8 is Google's public DNS server.
 
-server.bind(("127.0.0.1", 9999))
+        s.connect(("8.8.8.8", 80))  # UDP "connect": no packet sent, OS just picks a route  
+        ip = s.getsockname()[0]     #getsockname() asks: "What local address is this socket using?"
+    except OSError:
+        ip = "127.0.0.1"
+    finally:
+        s.close()
+    return ip
+
+PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 9999
+
+server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+server.bind(("0.0.0.0", PORT))  # all interfaces — other machines can reach us now
 server.listen()
 
-print("Server is waiting for a connection...")
+# load key early so we can show our own fingerprint before anyone connects
+server_private = load_or_create_key("server_key.bin")
+server_public = server_private.public_key
 
-client, address = server.accept() # wont continue unless client connect to it
+own_fp = hashlib.sha256(bytes(server_public)).hexdigest()
+own_fp = ":".join(own_fp[i:i + 4] for i in range(0, len(own_fp), 4))
+print("Your fingerprint:", own_fp)
 
+print(f"Server listening on 0.0.0.0:{PORT}")
+print(f"Other machine connects with: python client.py {get_lan_ip()} {PORT}")
+
+client, address = server.accept()
 
 print("Client address:", address)
 
-# !Key change 
-
-#Generate server key pair
-server_private = load_or_create_key("server_key.bin")
-server_public = server_private.public_key
 
 client_public_bytes = recv_message(client)
 

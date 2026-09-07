@@ -1,1168 +1,483 @@
-# P2P Encrypted Chat
+# P2P Encrypted Chat — Project Documentation
 
-An educational **peer-to-peer encrypted messaging system built from
-Python sockets and cryptographic primitives**, with persistent
-cryptographic identities, fingerprint-based peer authentication,
-encrypted local chat history, peer discovery, and eventually
-Internet/NAT-aware connectivity.
+## Overview
 
-The project is intentionally built from lower-level networking
-primitives rather than hiding the networking behind WebRTC, PeerJS, or a
-chat framework.
+An educational peer-to-peer encrypted messaging system built from low-level Python networking primitives. The goal is to understand and implement the networking stack rather than hiding it behind WebRTC, PeerJS, or a high-level P2P framework.
 
-> **Security note:** This is an educational implementation, not a
-> production-secure messenger and should not be compared with
-> Signal-level security guarantees.
+### Final target
 
-------------------------------------------------------------------------
+Two real computers should be able to discover each other, establish a direct connection when possible, authenticate cryptographic identities, communicate over an encrypted channel, persist encrypted conversation history locally, and use a relay when direct connectivity is impossible.
 
-## 1. Project Goal
+**Educational project — not Signal-level security.**
 
-The original goal is not a localhost chat application.
+## Architecture
 
-The final goal is:
-
-``` text
-Person A's computer
-        ↕
-     Internet
-        ↕
-Person B's computer
+```text
+                 ┌──────────────────────┐
+                 │  Rendezvous Server   │
+                 │ Discovery / Signaling│
+                 └──────────┬───────────┘
+                            │
+                     discovery information
+                       ↙          ↘
+                  ┌────────┐   ┌────────┐
+                  │ Peer A │◄─►│ Peer B │
+                  └────────┘   └────────┘
+                       actual P2P chat
 ```
 
-with the actual chat traffic flowing directly between peers whenever
-network conditions allow.
+Transport:
 
-The project should demonstrate understanding and implementation of:
-
--   TCP networking
--   message framing
--   authenticated encrypted communication
--   persistent cryptographic identity
--   peer fingerprint verification
--   encrypted local persistence
--   peer discovery / rendezvous
--   LAN networking
--   public vs private addressing
--   NAT and firewall behavior
--   NAT traversal
--   P2P connection management
-
-------------------------------------------------------------------------
-
-# 2. Current Architecture
-
-## Network communication
-
-``` text
-User
-  ↓
-Chat
-  ↓
-PyNaCl Box
-  ↓
-Message framing
-  ↓
-TCP sockets
-  ↓
-Peer
-```
-
-## Local storage
-
-``` text
-Message
-  ↓
-SecretBox
-  ↓
-SQLite
-```
-
-The two encryption layers have different purposes.
-
-### `Box`
-
-Protects messages **while travelling between peers**.
-
-### `SecretBox`
-
-Protects messages **stored locally on disk**.
-
-They use separate persistent keys.
-
-------------------------------------------------------------------------
-
-# 3. Current Project Files
-
-Current working files include:
-
-``` text
-client.py
-server.py
-protocol.py
-identity.py
-storage.py
-crypto_test.py
-
-rendezvous_server.py
-rendezvous_test.py
-
-client_key.bin
-server_key.bin
-client_storage_key.bin
-server_storage_key.bin
-
-client_history.db
-server_history.db
-```
-
-The exact rendezvous filenames may currently have longer/generated names
-in the working directory, but they represent the rendezvous server and
-its test client.
-
-Local/private files:
-
-``` text
-*.bin
-*.db
-```
-
-should not be committed to Git.
-
-------------------------------------------------------------------------
-
-# 4. Completed Milestones
-
-## Milestone 1 --- TCP sockets
-
-### What we built
-
-A basic TCP client/server connection using Python's `socket` module.
-
-Implemented and understood:
-
--   `socket()`
--   `bind()`
--   `listen()`
--   `accept()`
--   `connect()`
--   `send()`
--   `recv()`
--   `sendall()`
-
-### Why we needed it
-
-TCP provides the reliable byte stream on which the rest of the chat
-protocol operates.
-
-### What we chose
-
-Python TCP sockets instead of a networking framework.
-
-### Why
-
-The project is intended to teach the underlying networking concepts
-rather than abstract them away.
-
-### Result
-
-The client and server can establish a TCP connection and exchange data.
-
-------------------------------------------------------------------------
-
-## Milestone 2 --- Blocking sockets and threading
-
-### What we built
-
-The chat uses blocking sockets and a separate receiving thread.
-
-Conceptually:
-
-``` text
-Main thread
-    ↓
-read user input
-    ↓
-encrypt
-    ↓
-send
-
-
-Receive thread
-    ↓
-recv
-    ↓
-decrypt
-    ↓
-display
-```
-
-### Why we needed it
-
-A blocking `recv()` would otherwise prevent the user from typing while
-waiting for an incoming message.
-
-### Result
-
-Both sides can send and receive messages simultaneously.
-
-------------------------------------------------------------------------
-
-## Milestone 3 --- TCP message framing
-
-### What we built
-
-A custom length-prefixed message protocol:
-
-``` text
-[4-byte length][message bytes]
-```
-
-Implemented in `protocol.py`:
-
-``` python
-send_message(sock, data)
-recv_message(sock)
-```
-
-The length is encoded using:
-
-``` python
-struct.pack("!I", length)
-```
-
-and decoded using:
-
-``` python
-struct.unpack("!I", header)
-```
-
-### Why we needed it
-
-TCP is a byte stream. It does not preserve application-level message
-boundaries.
-
-One call to `send()` does not necessarily correspond to one call to
-`recv()`.
-
-### Result
-
-The application can reliably reconstruct complete messages from the TCP
-stream.
-
-------------------------------------------------------------------------
-
-## Milestone 4 --- Public/private key cryptography
-
-### What we built
-
-Each side generates a persistent PyNaCl public/private key pair.
-
-``` text
-Private key
-    ↓
-Public key
-```
-
-The current implementation uses PyNaCl's `Box`.
-
-### Why we needed it
-
-We need encrypted communication between peers without sharing a single
-symmetric key beforehand.
-
-### Result
-
-Each peer can derive a secure encrypted communication context using:
-
-``` python
-Box(private_key, peer_public_key)
-```
-
-------------------------------------------------------------------------
-
-## Milestone 5 --- Public-key exchange handshake
-
-### What we built
-
-A simple asymmetric handshake.
-
-Client:
-
-``` text
-Client → Client public key
-Client ← Server public key
-```
-
-Server:
-
-``` text
-Server ← Client public key
-Server → Server public key
-```
-
-The order was deliberately chosen so that both sides do not wait for the
-other indefinitely.
-
-### Result
-
-Both peers have the other peer's public key and can construct their
-`Box`.
-
-------------------------------------------------------------------------
-
-## Milestone 6 --- Persistent cryptographic identity
-
-### What we built
-
-`identity.py` contains:
-
-``` python
-load_or_create_key(filename)
-```
-
-If the key file exists:
-
-``` text
-read existing private key
-```
-
-Otherwise:
-
-``` text
-generate private key
-save it
-```
-
-Current identity files:
-
-``` text
-client_key.bin
-server_key.bin
-```
-
-### Why we needed it
-
-If a new key were generated every time the application started, the peer
-would have a different identity on every run.
-
-### Result
-
-A peer's cryptographic identity persists across restarts.
-
-------------------------------------------------------------------------
-
-## Milestone 7 --- Fingerprint verification
-
-### What we built
-
-The peer's public key is hashed using SHA-256:
-
-``` python
-hashlib.sha256(public_key_bytes).hexdigest()
-```
-
-The hash is displayed in grouped form:
-
-``` text
-ABCD:1234:5678:....
-```
-
-The user manually confirms the fingerprint.
-
-### Why we needed it
-
-Encryption alone does not solve the problem of knowing **who** is on the
-other end.
-
-Fingerprint verification provides a simple manual authentication
-mechanism.
-
-### Important design choice
-
-The peer's fingerprint is used as its identity rather than its IP
-address.
-
-------------------------------------------------------------------------
-
-## Milestone 8 --- SQLite chat history
-
-### What we built
-
-`storage.py` creates a SQLite database containing:
-
-``` text
-id
-fingerprint
-direction
-text
-timestamp
-```
-
-Messages are associated with the peer fingerprint.
-
-### Why we needed it
-
-Chat history should survive application restarts.
-
-### Important design choice
-
-History is keyed by:
-
-``` text
-peer fingerprint
-```
-
-rather than:
-
-``` text
-IP address
-```
-
-because IP addresses can change while cryptographic identity should
-remain stable.
-
-------------------------------------------------------------------------
-
-## Milestone 9 --- Encrypted local storage
-
-### What we built
-
-A separate persistent `SecretBox` key is generated and stored locally.
-
-Current storage keys:
-
-``` text
-client_storage_key.bin
-server_storage_key.bin
-```
-
-Saving:
-
-``` text
-Plaintext message
-      ↓
-SecretBox.encrypt()
-      ↓
-SQLite BLOB
-```
-
-Loading:
-
-``` text
-SQLite BLOB
-      ↓
-SecretBox.decrypt()
-      ↓
-Plaintext message
-```
-
-### Why we needed it
-
-Encrypting network traffic does not protect messages once they are
-written to disk.
-
-### Result
-
-The local SQLite database does not contain plaintext chat messages.
-
-------------------------------------------------------------------------
-
-## Milestone 10 --- Persistent restart loop
-
-### What we proved
-
-The complete local/test loop works:
-
-``` text
-TCP
- ↓
-framing
- ↓
-encrypted communication
- ↓
-persistent identity
- ↓
-fingerprint verification
- ↓
-encrypted SQLite history
- ↓
-application restart
- ↓
-history loads again
-```
-
-This was an important transition from a networking experiment into an
-actual persistent application.
-
-------------------------------------------------------------------------
-
-## Milestone 11 --- Rendezvous server prototype
-
-### What we built
-
-A basic rendezvous server prototype.
-
-It supports requests conceptually like:
-
-``` json
-{
-    "type": "register",
-    "id": "aadarsh"
-}
-```
-
-and:
-
-``` json
-{
-    "type": "lookup",
-    "id": "aadarsh"
-}
-```
-
-The server maintains an in-memory peer registry.
-
-### Why we need it
-
-A real P2P system still often needs a server for
-**discovery/signaling**, even though the server does not carry the
-actual chat messages.
-
-Target architecture:
-
-``` text
-              Rendezvous Server
-                /          \
-          discovery       discovery
-              ↓              ↓
-           Peer A  ←──────→ Peer B
-                   chat
-```
-
-### Current status
-
-This is only a prototype and is **not yet a correct Internet P2P
-discovery system**.
-
-The current implementation stores the TCP address observed from the
-rendezvous connection:
-
-``` python
-peers[peer_id] = address
-```
-
-That address is the endpoint of the peer's rendezvous connection, not
-necessarily the endpoint where the peer accepts P2P chat connections.
-
-This must be redesigned before using rendezvous for real peer
-connectivity.
-
-------------------------------------------------------------------------
-
-# 5. Current Message Flow
-
-## Network
-
-``` text
-"text"
-   ↓
-.encode()
-   ↓
-Box.encrypt()
-   ↓
-send_message()
-   ↓
-[4-byte length][ciphertext]
-   ↓
-TCP
-   ↓
-recv_message()
-   ↓
-Box.decrypt()
-   ↓
-.decode()
-   ↓
-"text"
-```
-
-## Database
-
-``` text
-"text"
-   ↓
-SecretBox.encrypt()
-   ↓
-SQLite BLOB
-```
-
-and:
-
-``` text
-SQLite BLOB
-   ↓
-SecretBox.decrypt()
-   ↓
-.decode()
-   ↓
-"text"
-```
-
-------------------------------------------------------------------------
-
-# 6. What Is Left
-
-## Phase 1 --- LAN connectivity
-
-### Status: NEXT
-
-Move from:
-
-``` text
-127.0.0.1
-```
-
-to actual LAN communication.
-
-Target:
-
-``` text
-Computer A
-192.168.x.x
-      ↕
-    LAN
-      ↕
-Computer B
-192.168.x.x
-```
-
-Learn and test:
-
--   private IPv4 addresses
--   listening interfaces
--   ports
--   LAN routing
--   Windows firewall
--   TCP reachability
--   connection diagnostics
-
-### Success condition
-
-Two physical computers can run the current chat and communicate over the
-same LAN.
-
-------------------------------------------------------------------------
-
-# Phase 2 --- Refactor client/server into a peer
-
-### Status: PLANNED
-
-Current architecture:
-
-``` text
-server.py ←→ client.py
-```
-
-Target:
-
-``` text
-peer.py
-```
-
-Every peer should be able to:
-
-``` text
-listen
-accept
-connect
-send
-receive
-```
-
-Conceptually:
-
-``` text
-             Peer
-        ┌─────────────┐
-        │ listen      │
-        │ accept      │
-        │ connect     │
-        │ send        │
-        │ receive     │
-        └─────────────┘
-```
-
-This removes the conceptual distinction between permanent "server" and
-"client".
-
-------------------------------------------------------------------------
-
-# Phase 3 --- Real peer discovery / rendezvous
-
-### Status: PROTOTYPE EXISTS
-
-Build a proper rendezvous mechanism.
-
-The rendezvous service should handle things such as:
-
-``` text
-Peer ID
-Public key / fingerprint
-Listening information
-Peer availability
-Connection metadata
-```
-
-It should be used for:
-
-``` text
-discovery / signaling
-```
-
-not:
-
-``` text
-chat message transport
-```
-
-The actual chat should remain:
-
-``` text
-Peer A ←────────→ Peer B
-```
-
-------------------------------------------------------------------------
-
-# Phase 4 --- Internet connectivity
-
-### Status: NOT STARTED
-
-Move peers from the same LAN to different networks.
-
-Understand:
-
-``` text
-Private IP
-    ↓
-NAT
-    ↓
-Router
-    ↓
-Public Internet
-    ↓
-Router
-    ↓
-NAT
-    ↓
-Private IP
-```
-
-Topics:
-
--   public IP
--   private IP
--   ports
--   inbound connections
--   outbound connections
--   NAT
--   firewall
--   port forwarding
--   why direct TCP connections fail across many home networks
-
-------------------------------------------------------------------------
-
-# Phase 5 --- NAT traversal
-
-### Status: MAJOR REMAINING COMPONENT
-
-Investigate and implement an appropriate connectivity mechanism.
-
-Potential components:
-
--   STUN
--   endpoint discovery
--   UDP hole punching
--   TCP traversal where applicable
--   rendezvous-assisted connection setup
--   relay fallback if direct connectivity is impossible
-
-The goal is not to pretend every NAT can be defeated.
-
-The goal is to build a system that:
-
-``` text
-attempts direct P2P connectivity
-        ↓
-uses traversal techniques where possible
-        ↓
-handles failure explicitly
-```
-
-------------------------------------------------------------------------
-
-# Phase 6 --- Connection state management
-
-### Status: PLANNED
-
-Introduce an explicit connection lifecycle:
-
-``` text
-DISCOVERING
-     ↓
-KNOWN
-     ↓
-CONNECTING
-     ↓
-CONNECTED
-     ↓
-AUTHENTICATING
-     ↓
-VERIFIED
-     ↓
-CHAT
-```
-
-Failure paths should be handled explicitly:
-
-``` text
-CONNECTING
-     ↓
-FAILED
-     ↓
-RETRY / ALTERNATIVE
-```
-
-This becomes important once discovery, NAT traversal, and reconnect
-logic are introduced.
-
-------------------------------------------------------------------------
-
-# Phase 7 --- Security hardening
-
-### Status: PLANNED
-
-The current cryptographic implementation is a strong educational
-foundation, but it is not a complete production security protocol.
-
-Investigate:
-
--   malformed packets
--   maximum message size
--   nonce handling
--   replay considerations
--   key replacement
--   identity changes
--   connection timeouts
--   peer authentication
--   graceful disconnect
--   concurrent connections
--   error handling
--   key-file protection
-
-Document the threat model and limitations honestly.
-
-------------------------------------------------------------------------
-
-# Phase 8 --- Application polish
-
-### Status: PLANNED
-
-Turn the networking system into a clean usable application.
-
-Potential features:
-
--   peer identity
--   connection status
--   verified fingerprint
--   send/receive messages
--   persistent history
--   reconnect
--   clear connection errors
--   graceful shutdown
-
-The UI should remain secondary to the networking architecture.
-
-------------------------------------------------------------------------
-
-# Phase 9 --- Testing
-
-### Status: PLANNED
-
-Test at multiple network levels.
-
-## Local
-
-``` text
-Peer A ↔ Peer B
-```
-
-## LAN
-
-``` text
-Computer A ↔ Computer B
-```
-
-## Different networks
-
-``` text
-Network A ↔ Internet ↔ Network B
-```
-
-## Failure cases
-
-Test:
-
--   peer offline
--   wrong fingerprint
--   wrong public key
--   wrong port
--   firewall blocking connection
--   malformed frame
--   oversized frame
--   connection dropped
--   peer restart
--   identity persistence
--   IP change
--   corrupted storage
--   rendezvous peer not found
-
-------------------------------------------------------------------------
-
-# Phase 10 --- Final documentation
-
-### Status: PLANNED
-
-The final documentation should explain:
-
-``` text
-Architecture
-Networking model
-Message framing
-Cryptographic design
-Peer identity
-Fingerprint authentication
-Storage encryption
-Peer discovery
-NAT traversal
-Connection lifecycle
-Threat model
-Known limitations
-Testing
-Running the project
-```
-
-The documentation should remain concise and technical.
-
-For each milestone:
-
-``` text
-What we built
-
-Why we needed it
-
-What we chose
-
-Why we chose it
-
-Result
-```
-
-Avoid generic tutorial-style explanations and unnecessary fluff.
-
-------------------------------------------------------------------------
-
-# 7. Final Target Architecture
-
-The intended final architecture is:
-
-``` text
-                       ┌──────────────────────┐
-                       │  Rendezvous Server   │
-                       │                      │
-                       │  Discovery/Signaling │
-                       └──────────┬───────────┘
-                                  │
-                         connection information
-                           ↙              ↘
-                          ↓                ↓
-
-                    ┌──────────┐      ┌──────────┐
-                    │  Peer A  │◄────►│  Peer B  │
-                    │          │      │          │
-                    │ listen   │      │ listen   │
-                    │ connect  │      │ connect  │
-                    └────┬─────┘      └────┬─────┘
-                         │                  │
-                         └──── P2P TCP ─────┘
-                                  │
-                           Message framing
-                                  │
-                             PyNaCl Box
-                                  │
-                               Chat
-                                  │
-                           SecretBox
-                                  │
-                              SQLite
-```
-
-The rendezvous server helps peers **find each other**.
-
-It should not become the permanent middleman for chat traffic.
-
-------------------------------------------------------------------------
-
-# 8. Final Project Definition
-
-The finished project should be described as:
-
-> **A peer-to-peer encrypted messaging system built from Python TCP
-> sockets, implementing custom message framing, persistent cryptographic
-> identities, fingerprint-based peer authentication, encrypted local
-> conversation history, peer discovery, and NAT-aware Internet
-> connectivity.**
-
-A shorter description:
-
-> **An educational P2P encrypted messaging system built from raw Python
-> networking primitives, with authenticated peer identities, encrypted
-> transport, encrypted local storage, peer discovery, and NAT
-> traversal.**
-
-------------------------------------------------------------------------
-
-# 9. What Makes This Project Different
-
-This is not intended to compete with WebRTC/PeerJS-based chat
-applications by having a prettier UI.
-
-The technical goal is to understand and implement the networking layers
-underneath a P2P system.
-
-Comparison:
-
-``` text
-Typical P2P student project
-
+```text
 Application
-    ↓
-WebRTC / PeerJS
-    ↓
-Network
-```
-
-This project:
-
-``` text
-Application
-    ↓
+ ↓
 Peer management
-    ↓
-Peer discovery
-    ↓
+ ↓
 Cryptographic identity
-    ↓
-PyNaCl encryption
-    ↓
+ ↓
+PyNaCl Box
+ ↓
 Custom message framing
-    ↓
+ ↓
 TCP sockets
-    ↓
+ ↓
 IP networking
-    ↓
+ ↓
 NAT / firewall / traversal
 ```
 
-The project therefore demonstrates both **application development and
-networking fundamentals**.
+Local storage:
 
-------------------------------------------------------------------------
+```text
+Message → SecretBox → SQLite
+```
 
-# 10. Development Roadmap
+If direct P2P fails, a relay should forward already-encrypted traffic without needing plaintext or private keys.
 
-Current progression:
+# Completed
 
-``` text
-TCP
-  ↓
+## TCP fundamentals
+
+Implemented TCP server/client sockets, `bind()`, `listen()`, `accept()`, `connect()`, `sendall()`, `recv()`, blocking sockets, and threaded receive handling.
+
+## TCP message framing
+
+Messages use:
+
+```text
+[4-byte length][message bytes]
+```
+
+`protocol.py` implements `send_message()` and `recv_message()` using `struct.pack("!I", ...)` and `struct.unpack("!I", ...)`.
+
+TCP is a byte stream, so framing creates application-level message boundaries.
+
+## Threaded communication
+
+The receive loop runs separately from the input/send loop, allowing both peers to send and receive concurrently.
+
+## Encrypted transport
+
+PyNaCl `Box` provides public-key authenticated encryption. Each peer has a private/public key pair; public keys are exchanged and private keys remain local.
+
+## Persistent cryptographic identity
+
+`identity.py` persists each peer's private key. Restarting the application therefore preserves the same cryptographic identity.
+
+## Fingerprint verification
+
+A SHA-256 fingerprint of the peer's public key is displayed for manual verification. This is a TOFU/manual trust model, conceptually similar to SSH host-key verification, not Signal's identity-verification system.
+
+## SQLite history
+
+Conversation history is stored locally in SQLite and associated with the peer's cryptographic fingerprint rather than its IP address.
+
+## Encrypted local history
+
+Messages are encrypted with PyNaCl `SecretBox` before being stored in SQLite. The storage key is separate from the transport identity key.
+
+## Restart persistence
+
+Verified flow:
+
+```text
+TCP → framing → encrypted communication
+→ persistent identity → fingerprint verification
+→ encrypted SQLite history → restart → history loads again
+```
+
+# Current code structure
+
+```text
+p2p-chat/
+├── client.py
+├── server.py
+├── protocol.py
+├── identity.py
+├── storage.py
+├── rendezvous_server.py
+├── rendezvous_test.py
+├── crypto_test.py
+├── README.md
+├── project.md
+└── .gitignore
+```
+
+Local secrets/databases such as `*.bin` and `*.db` should not be committed.
+
+### Responsibilities
+
+- `protocol.py` — framing.
+- `identity.py` — persistent transport identity and storage keys.
+- `storage.py` — encrypted SQLite history.
+- `client.py` / `server.py` — current chat endpoints.
+- `rendezvous_server.py` — discovery/signaling prototype.
+
+# Rendezvous prototype
+
+A basic register/lookup rendezvous prototype exists. It is discovery/signaling only, not the normal chat transport.
+
+Known flaws:
+
+1. It currently stores the rendezvous connection's observed source endpoint. That source port is ephemeral and is not the peer's P2P listening port. The peer must explicitly advertise its P2P endpoint and later its observed public endpoint.
+2. Rendezvous and chat currently collide on `127.0.0.1:9999`; they need separate ports.
+3. Registrations never expire. A real version needs TTL/heartbeat/refresh and stale-entry expiry.
+
+# Immediate next milestone — LAN
+
+Do not change encryption, framing, storage, or protocol semantics for LAN testing. Only change the address layer.
+
+### Server
+
+```python
+PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 9999
+server.bind(("0.0.0.0", PORT))
+```
+
+Print the active LAN IP, for example with:
+
+```python
+def get_lan_ip():
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+    except OSError:
+        ip = "127.0.0.1"
+    finally:
+        s.close()
+    return ip
+```
+
+### Client
+
+```python
+host = sys.argv[1] if len(sys.argv) > 1 else "127.0.0.1"
+port = int(sys.argv[2]) if len(sys.argv) > 2 else 9999
+client.connect((host, port))
+```
+
+### LAN test
+
+1. On the server PC, run `ipconfig` and identify the active Wi-Fi/Ethernet IPv4 address.
+2. Start `python server.py 9999`.
+3. Verify with `netstat -ano | findstr :9999` that `0.0.0.0:9999` is listening.
+4. From the second PC run `Test-NetConnection <SERVER_LAN_IP> -Port 9999`.
+5. Only after `TcpTestSucceeded : True`, run `python client.py <SERVER_LAN_IP> 9999`.
+6. Verify fingerprints, bidirectional messaging, encrypted history, and restart persistence.
+
+A failed `ping` does not by itself prove TCP is blocked because ICMP may be filtered.
+
+If Windows firewall blocks the connection, investigate the network profile/firewall before changing application code. An explicit rule can be added when appropriate:
+
+```powershell
+netsh advfirewall firewall add rule name="p2p-chat-9999" dir=in action=allow protocol=TCP localport=9999
+```
+
+### Cleanup before LAN
+
+Fix the client storage-key typo from `client_storage_key.bon` to `client_storage_key.bin`, and standardize the database name to `client_history.db`.
+
+# Internet P2P roadmap
+
+```text
+LAN
+ ↓
+peer.py refactor
+ ↓
+working rendezvous service
+ ↓
+public endpoint discovery
+ ↓
+STUN
+ ↓
+TCP direct-connection experiment
+ ↓
+measure result
+ ↓
+direct P2P if possible
+ ↓
+relay fallback
+```
+
+Do not jump directly to Internet debugging before LAN works.
+
+# NAT traversal
+
+The intended experiment is:
+
+```text
+STUN discovery
+ ↓
+learn public-facing endpoint
+ ↓
+simultaneous TCP connection attempt
+ ↓
+measure result
+```
+
+TCP hole punching is not guaranteed on modern networks, especially with symmetric NAT, CGNAT, restrictive firewalls, or mobile networks. A failed experiment is still a valid engineering result if the failure is measured, explained, and documented.
+
+V1 requires one real NAT traversal attempt and an explicit fallback strategy, not universal NAT support.
+
+# Security hardening
+
+## Maximum message size
+
+Current `recv_message()` trusts the 4-byte length. A malicious peer could declare an enormous frame and cause dangerous memory/accumulation behavior. Add `MAX_MESSAGE_SIZE` as the first hardening task once remotely reachable.
+
+## Connection state
+
+Today, a receive thread can detect EOF while the send loop continues accepting input, eventually producing errors such as `BrokenPipeError`. A connection state machine should coordinate both sides.
+
+## Socket timeouts
+
+Blocking sockets can hang forever on half-dead connections. Later versions should consider timeouts and/or heartbeats.
+
+## Crypto/decode errors
+
+Malformed input can cause `CryptoError` or `UnicodeDecodeError`. These should be handled without silently killing the receive thread.
+
+## Replay protection
+
+The current protocol has no explicit replay-protection mechanism.
+
+# Security model and limitations
+
+This project does **not** claim Signal-level security.
+
+- **No forward secrecy:** persistent long-term transport keys mean later key compromise may expose recorded traffic. A Signal-style ratchet is out of scope for V1.
+- **Local key files are not encrypted at rest:** future versions could use OS-backed credential/key storage.
+- **Manual fingerprint verification:** security depends on the user verifying the fingerprint correctly.
+- **No professional audit.**
+- **Metadata remains visible:** network endpoints, timing, and traffic patterns can leak information.
+- **Machine compromise is out of scope.**
+
+Do not use the current project for sensitive real-world communications.
+
+# V1 definition of done
+
+- [x] TCP communication
+- [x] TCP framing
+- [x] Threaded send/receive
+- [x] Encrypted transport
+- [x] Persistent cryptographic identity
+- [x] Fingerprint verification
+- [x] SQLite message history
+- [x] Encrypted local history
+- [x] Restart persistence
+- [ ] LAN communication between two physical machines
+- [ ] Unified `peer.py` architecture
+- [ ] Working rendezvous service
+- [ ] One real NAT traversal experiment
+- [ ] Documented NAT result
+- [ ] Relay fallback design/prototype
+- [ ] Connection state handling
+- [ ] Framing/protocol/storage automated tests
+- [ ] Threat model
+- [ ] Final README
+- [ ] Short terminal demo
+
+The goal is to ship a strong 80% project rather than endlessly chase an imaginary 95%. Hardening and additional testing can continue after V1.
+
+# Threat model
+
+### Intended protections
+
+- Passive network observers should not read message plaintext.
+- Peers have persistent cryptographic identities.
+- Users can manually verify peer identity using fingerprints.
+- SQLite history does not contain plaintext messages.
+- IP changes do not redefine peer identity.
+
+### Not currently protected against
+
+- Compromise of a peer's machine.
+- Theft of local key files.
+- Long-term key compromise with recorded traffic.
+- Malicious rendezvous-server behavior.
+- Traffic analysis and metadata leakage.
+- Sophisticated active attacks beyond the current authentication model.
+- Universal NAT traversal.
+- Implementation vulnerabilities not yet discovered.
+
+# Testing strategy
+
+### Framing
+
+Test empty/small/large messages, fragmented reads, multiple messages, invalid lengths, and oversized frames.
+
+### Storage
+
+Test save/load, multiple peers, direction, timestamps, ciphertext-at-rest, and incorrect storage keys.
+
+### Crypto
+
+Test successful encryption/decryption, wrong keys, persistent identity, and fingerprint stability.
+
+### Integration
+
+```text
+connect
+ ↓
+key exchange
+ ↓
+fingerprint verification
+ ↓
+encrypted message
+ ↓
+store message
+ ↓
+restart
+ ↓
+load history
+```
+
+# Demo story
+
+The final demonstration should prove the system rather than merely show code:
+
+1. Start peer A.
+2. Start peer B.
+3. Establish a connection.
+4. Verify fingerprints.
+5. Send messages both ways.
+6. Close the chat.
+7. Restart it.
+8. Verify the same identity.
+9. Show previous encrypted history.
+10. Demonstrate two physical machines.
+11. Demonstrate rendezvous discovery.
+12. Show the direct P2P attempt.
+13. Explain relay fallback.
+
+The strongest simple visual milestone is:
+
+```text
+Close chat
+ ↓
+Reopen chat
+ ↓
+Verify same fingerprint
+ ↓
+Previous encrypted history appears
+```
+
+# Project positioning
+
+### Full description
+
+> A peer-to-peer encrypted messaging system built from Python TCP sockets, implementing custom message framing, persistent cryptographic identities, fingerprint-based peer authentication, encrypted local conversation history, peer discovery, and NAT-aware Internet connectivity.
+
+### Short description
+
+> An educational P2P encrypted messaging system built from raw Python networking primitives, with authenticated peer identities, encrypted transport, encrypted local storage, peer discovery, and NAT traversal.
+
+The project should emphasize implemented engineering rather than simply naming libraries. WebRTC can provide genuine P2P communication, but this project is valuable because the lower networking layers are implemented and understood directly.
+
+# Build-in-public strategy
+
+Use proof-first posts and short terminal recordings rather than generic progress updates.
+
+Strong milestones include:
+
+```text
+TCP works
+ ↓
 TCP framing
-  ↓
-Threaded communication
-  ↓
+ ↓
 Encryption
-  ↓
-Fingerprint authentication
-  ↓
+ ↓
+Fingerprint verification
+ ↓
 Persistent identity
-  ↓
-Encrypted local history
-  ↓
-Restart persistence
-  ↓
-Rendezvous prototype
-  ↓
-LAN connectivity              ← NEXT
-  ↓
-Unified peer.py
-  ↓
-Real peer discovery
-  ↓
-Different networks
-  ↓
-NAT + firewall
-  ↓
-NAT traversal
-  ↓
-Connection state/reconnect
-  ↓
-Security hardening
-  ↓
-Testing
-  ↓
-Documentation
-  ↓
-Polished portfolio project
+ ↓
+Encrypted persistent history
+ ↓
+Two physical machines
+ ↓
+Cross-network P2P
 ```
 
-------------------------------------------------------------------------
+The final repository should include a clean README, architecture diagram, threat model, limitations, testing results, NAT experiment results, demo video, and technical write-up.
 
-# 11. Current Immediate Task
+# Blog plan — after V1
 
-**Do not rewrite the entire project yet.**
+A blog is worth writing **after the project is actually finished**. The story is stronger than "I built a chat app in Python."
 
-The immediate milestone is:
+Possible titles:
 
-> **Make the existing encrypted chat work between two physical computers
-> on the same LAN.**
+- **I Built a P2P Encrypted Chat From Raw Python Sockets**
+- **What Actually Happens When You Build P2P Messaging From Scratch**
 
-After that:
+Suggested structure:
 
-1.  Refactor the architecture into `peer.py`.
-2.  Correctly integrate rendezvous/discovery.
-3.  Test peers on different networks.
-4.  Study and implement NAT traversal.
-5.  Harden the protocol.
-6.  Test failure cases.
-7.  Polish and document the final system.
+1. Why build it instead of using WebRTC/PeerJS?
+2. Starting with TCP.
+3. Why TCP needs application-level framing.
+4. Making send/receive concurrent.
+5. Adding public-key encryption and persistent identity.
+6. Encryption vs authentication: fingerprints.
+7. Encrypted persistent history with SQLite.
+8. Moving from localhost to two physical machines.
+9. Building peer discovery with a rendezvous server.
+10. Attempting real Internet P2P with STUN and TCP traversal.
+11. Why direct P2P fails and where relays fit.
+12. Security reality check and limitations.
+13. What the project taught about networking, protocols, and security.
 
-------------------------------------------------------------------------
+The blog should document failures honestly. If NAT traversal fails, that result is part of the engineering story rather than something to hide.
 
-# 12. Project Status
+# Current status
 
-``` text
-Foundation                         ████████████████████  DONE
+| Component | Status |
+|---|---|
+| TCP fundamentals | DONE |
+| TCP framing | DONE |
+| Threaded communication | DONE |
+| PyNaCl encryption | DONE |
+| Persistent identity | DONE |
+| Fingerprint authentication | DONE |
+| SQLite history | DONE |
+| SecretBox storage | DONE |
+| Restart persistence | DONE |
+| Rendezvous prototype | DONE / NEEDS REDESIGN |
+| LAN | NEXT |
+| Unified `peer.py` | TODO |
+| Production-style rendezvous | TODO |
+| Internet connectivity | TODO |
+| NAT traversal | TODO |
+| Relay fallback | TODO |
+| Connection state | TODO |
+| Security hardening | TODO |
+| Automated tests | PARTIAL |
+| Threat model | TODO |
+| Final README | TODO |
+| Demo | TODO |
+| Technical blog | AFTER V1 |
 
-LAN networking                     ░░░░░░░░░░░░░░░░░░░░  NEXT
-Peer refactor                      ░░░░░░░░░░░░░░░░░░░░
-Rendezvous integration             ████░░░░░░░░░░░░░░░░  PROTOTYPE
-Internet connectivity              ░░░░░░░░░░░░░░░░░░░░
-NAT traversal                      ░░░░░░░░░░░░░░░░░░░░
-Connection state                   ░░░░░░░░░░░░░░░░░░░░
-Security hardening                 ░░░░░░░░░░░░░░░░░░░░
-Testing                            ░░░░░░░░░░░░░░░░░░░░
-Documentation                     ░░░░░░░░░░░░░░░░░░░░
-Final polish                       ░░░░░░░░░░░░░░░░░░░░
-```
+# Engineering principle
 
-This document is **living project documentation**. New milestones should
-be added as the implementation progresses.
+> **Understand the layer before abstracting it away.**
+
+The point is not to reinvent production-grade messaging software. The point is to understand what TCP actually gives you, what it does not give you, how applications create protocols, how cryptographic identity works, how persistence changes application design, how peers discover each other, why NAT makes P2P difficult, where relays become necessary, and what security guarantees the implementation actually provides.
