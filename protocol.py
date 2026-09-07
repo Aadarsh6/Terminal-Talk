@@ -16,31 +16,27 @@ def send_message(sock, data):
 
 
 def recv_message(sock):
-    #receve exactly 4 bytes form header
+    try:
+        header = b""
+        while len(header) < 4:
+            chunk = sock.recv(4 - len(header))
+            if not chunk:
+                return None
+            header += chunk
 
-    header = b""
+        length = struct.unpack("!I", header)[0]
 
-    while len(header) < 4:
-        chunk = sock.recv(4 - len(header))
+        data = b""
+        while len(data) < length:
+            chunk = sock.recv(length - len(data))
+            if not chunk:
+                return None
+            data += chunk
 
-        if not chunk: 
-            return None
+        return data
 
-        header += chunk
-
-    #convert the 4 bytes back to integer unpack
-    length = struct.unpack("!I", header)[0]
-
-    #Receve the actual meaasge
-    data = b""
-
-    while len(data) < length:
-        chunk = sock.recv(length - len(data))
-
-        if not chunk:
-            return None
-
-        data += chunk
-
-    #convert bytes back to str
-    return data
+    except OSError:
+        # ConnectionResetError (WinError 10054), BrokenPipeError,
+        # timeouts — connection is dead or unusable. Report it
+        # exactly like a clean EOF so callers have ONE convention.
+        return None
