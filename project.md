@@ -461,9 +461,9 @@ The blog should document failures honestly. If NAT traversal fails, that result 
 | SQLite history | DONE |
 | SecretBox storage | DONE |
 | Restart persistence | DONE |
+| Unified `peer.py` | DONE |
 | Rendezvous prototype | DONE / NEEDS REDESIGN |
 | LAN | NEXT |
-| Unified `peer.py` | TODO |
 | Production-style rendezvous | TODO |
 | Internet connectivity | TODO |
 | NAT traversal | TODO |
@@ -509,3 +509,7 @@ Result: same-machine and two-physical-machine chat pass; identity andhistory con
 Second shutdown finding: clean EOF detection worked, but a local quitcrashed at interpreter shutdown with "Fatal Python error:_enter_buffered_busy" — the daemon receive thread was killed mid-printholding the stdout lock during finalization. Fix: main thread setsconnected=False before closing (suppressing a phantom "Peerdisconnected." announcement caused by our own socket close) and joinsthe receive thread with a 2s timeout before exiting; daemon flag keptas a hang safety net.
 
 Three distinct bugs found by two tests — RST handling, phantom EOF, shutdown race. That's the M13 log now earning its keep.
+
+# **M14 Rendezvous server**
+
+V1 implemented (M14): advertised listen port, public-key registry with fingerprint lookup, 90s TTL with 30s refresh. Known limitation: peer_id is squattable — id-to-key binding is Phase 7."
