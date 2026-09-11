@@ -186,66 +186,92 @@ def rendezvous_register(private_key, name, listen_port, rv_host):
     except OSError:
         return None
 
-def punch_mode(peer_id, my_port, rv_host):
-    private_key = load_or_create_key(f"punch_{my_port}.bin")
-
-    if rendezvous_register(private_key, f"punch{my_port}", my_port, rv_host) is None:
-        print("Rendezvous unreachable — cannot punch")
-        return
-
-    # 2. Learn the target's public punch endpoint
+def rendezvous_lookup(peer_id, rv_host):
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         sock.settimeout(5)
         sock.connect((rv_host, RENDEZVOUS_PORT))
         send_message(sock, json.dumps({"type": "lookup", "id": peer_id}).encode())
-        resp_raw = recv_message(sock)
+        resp = recv_message(sock)
         sock.close()
+        return json.loads(resp.decode()) if resp else None
     except OSError:
-        print("Rendezvous unreachable during lookup")
+        return None
+
+
+def punch_mode(my_id, peer_id, my_port, rv_host):
+    private_key = load_or_create_key(f"{my_id}_key.bin")
+    own_fp = format_fingerprint(bytes(private_key.public_key))
+
+    if rendezvous_register(private_key, my_id, my_port, rv_host) is None:
+        print("Rendezvous unreachable — cannot punch")
         return
-    if resp_raw is None:
-        print("Rendezvous closed the connection")
-        return
-    target = json.loads(resp_raw.decode())
-    if target.get("status") != "found":
+
+    target = rendezvous_lookup(peer_id, rv_host)   # small helper, below
+    if target is None or target.get("status") != "found":
         print(f"'{peer_id}' not registered yet")
         return
 
-    t_ip, t_port = target["ip"], target["punch_port"]
-    own_fp = format_fingerprint(bytes(private_key.public_key))
+    t_ip = target["ip"]
+    t_port = target.get("punch_port") or target["port"]
     peer_fp = target["fingerprint"]
-    print(f"Punching {t_ip}:{t_port} — retrying for 60s. Other side must start too.")
+    i_am_connector = own_fp.replace(":", "") < peer_fp.replace(":", "")
 
-    # 3. Simultaneous open: connect FROM our listen port TO their punch port
-    punch = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    punch.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    punch.bind(("0.0.0.0", my_port))
+    print(f"Punching {t_ip}:{t_port} for 60s — start the other side too!")
+    print("My role:", "connector (I dial out)" if i_am_connector else "accepter (I wait)")
 
+    # listener: takes the peer's inbound punch
+    accepted = []
+    listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    listener.bind(("0.0.0.0", my_port))
+    listener.listen()
+
+    def accepter():
+        while not accepted:
+            try:
+                conn, _ = listener.accept()
+                accepted.append(conn)
+            except OSError:
+                return
+    threading.Thread(target=accepter, daemon=True).start()
+
+    winner = None
+    last_outbound = None
     deadline = time.time() + 60
-    while time.time() < deadline:
-        try:
-            punch.connect((t_ip, t_port))
-            print(f"PUNCHED THROUGH! Connected to {t_ip}:{t_port}")
-            break
-        except OSError:
-            time.sleep(1)   # our SYN keeps our NAT mapping alive; retry until theirs arrives
-    else:
-        print("Punch failed after 60s — NAT(s) refused/dropped. That is the measured result.")
-        punch.close()
+    while time.time() < deadline and winner is None:
+        if i_am_connector:
+            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            s.bind(("0.0.0.0", my_port))     # THE punch: same port every attempt
+            s.settimeout(2)
+            try:
+                s.connect((t_ip, t_port))
+                winner = s
+            except OSError:
+                last_outbound = s            # keep the newest attempt alive (NAT mapping)
+        else:
+            if accepted:
+                winner = accepted[0]
+                break
+        time.sleep(0.5)
+
+    listener.close()
+    if winner is None:
+        print("Punch failed after 60s — that is the measured result. Screenshot it.")
         return
 
-    # 4. Deterministic roles: lower fingerprint sends its key first
-    initiator = own_fp.replace(":", "") < peer_fp.replace(":", "")
-    box, verified_fp = handshake(punch, private_key, initiator=initiator)
+    print("PUNCHED THROUGH!")
+
+    box, verified_fp = handshake(winner, private_key, initiator=i_am_connector)
     if box is None:
         print("Peer vanished after punch")
         return
     if not verify_fingerprints(own_fp, verified_fp):
         print("Fingerprint mismatch — closing.")
-        punch.close()
+        winner.close()
         return
-    chat(punch, box, verified_fp, f"punch{my_port}")
+    chat(winner, box, verified_fp, my_id)
 
 
 
@@ -374,13 +400,14 @@ def main():
             sys.exit(1)
         find_mode(sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else "127.0.0.1")
     elif sys.argv[1] == "punch":
-        if len(sys.argv) < 3:
-            print("usage: python peer.py punch <peer_id> [my_port] [rv_host]")
+        if len(sys.argv) < 4:
+            print("usage: python peer.py punch <my_id> <peer_id> [my_port] [rv_host]")
             sys.exit(1)
-        peer_id = sys.argv[2]
-        my_port = int(sys.argv[3]) if len(sys.argv) > 3 else 9999
-        rv = sys.argv[4] if len(sys.argv) > 4 else "127.0.0.1"
-        punch_mode(peer_id, my_port, rv)
+        my_id = sys.argv[2]
+        peer_id = sys.argv[3]
+        my_port = int(sys.argv[4]) if len(sys.argv) > 4 else 9999
+        rv = sys.argv[5] if len(sys.argv) > 5 else "127.0.0.1"
+        punch_mode(my_id, peer_id, my_port, rv)
     else:
         print("unknown mode:", sys.argv[1])
         sys.exit(1)
