@@ -208,9 +208,16 @@ def punch_mode(my_id, peer_id, my_port, rv_host):
         print("Rendezvous unreachable — cannot punch")
         return
 
-    target = rendezvous_lookup(peer_id, rv_host)
+    # wait up to 20s for the peer to appear — start order no longer matters
+    target = None
+    dl = time.time() + 20
+    while time.time() < dl:
+        target = rendezvous_lookup(peer_id, rv_host)
+        if target and target.get("status") == "found":
+            break
+        time.sleep(1)
     if target is None or target.get("status") != "found":
-        print(f"'{peer_id}' not registered yet — start them first, wait, then rerun")
+        print(f"'{peer_id}' never registered within 20s")
         return
 
     t_ip = target["ip"]
