@@ -513,3 +513,22 @@ Three distinct bugs found by two tests — RST handling, phantom EOF, shutdown r
 # **M14 Rendezvous server**
 
 V1 implemented (M14): advertised listen port, public-key registry with fingerprint lookup, 90s TTL with 30s refresh. Known limitation: peer_id is squattable — id-to-key binding is Phase 7."
+
+
+
+# **M15 — Internet connectivity + NAT traversal experiment — MEASURED**
+
+Setup: rendezvous on Azure VM (Central India, public IP 20.244.35.150).Peer A: home Wi-Fi (laptop 192.168.1.8, NAT public 122.162.151.183,port 9999). Peer B: phone hotspot (laptop NAT public 157.49.112.64,port 8888). Different carriers, different networks.
+
+Results:
+
+Cross-network discovery: WORKING. Both peers registered through thecloud rendezvous; the registry holds two distinct public NATmappings (observed-IP + advertised-port). Lookup returned Peer A'spublic endpoint to Peer B across networks with zero code changes.
+Direct TCP connection attempt: FAILED as predicted. Peer B →Peer A's public endpoint → WinError 10060 (timeout, ~20s). Analysis: NAT A drops unsolicited inbound SYNs; the mapping atNAT A exists only for connections initiated from inside. NAT B(mobile CGNAT) is at minimum equally restrictive — carrier-gradeNAT shares one public IP across many subscribers.
+Conclusion: discovery over the Internet works; direct TCP betweenpeers behind default home/mobile NATs does not, without coordination.Measured behavior matches NAT theory: inbound packets are only acceptedfor mappings created by outbound traffic.
+
+Traversal plan (V2, per §10):
+
+STUN: learn each peer's public endpoint (this experiment's registryalready demonstrated the observation half).
+Simultaneous connect (TCP hole punching): both peers connectoutward at the same time, each creating the NAT mapping the other'sinbound SYN needs. Success depends on NAT types: works onendpoint-independent NATs; fails on symmetric NAT / CGNAT, whichthe hotspot side almost certainly is.
+Measured fallback: relay. Encrypted traffic relays through a publicserver (the VM); the rendezvous never needs plaintext or keys —consistent with the architecture's relay principle.
+V1 outcome: direct connectivity attempted and measured; failureexplained at the NAT level; fallback strategy documented. Per thefixed V1 definition, this milestone is COMPLETE.
