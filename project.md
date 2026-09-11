@@ -532,3 +532,16 @@ STUN: learn each peer's public endpoint (this experiment's registryalready demon
 Simultaneous connect (TCP hole punching): both peers connectoutward at the same time, each creating the NAT mapping the other'sinbound SYN needs. Success depends on NAT types: works onendpoint-independent NATs; fails on symmetric NAT / CGNAT, whichthe hotspot side almost certainly is.
 Measured fallback: relay. Encrypted traffic relays through a publicserver (the VM); the rendezvous never needs plaintext or keys —consistent with the architecture's relay principle.
 V1 outcome: direct connectivity attempted and measured; failureexplained at the NAT level; fallback strategy documented. Per thefixed V1 definition, this milestone is COMPLETE.
+
+M15 — Final **NAT traversal result — MEASURED**
+Valid run conditions verified before timing: PC B confirmed on hotspotCGNAT (10.197.x.x local; hotspot public 157.49.119.123), PC A on homeWi-Fi (public 122.162.151.183). Registry pre-flight confirmed bothpublic endpoints before the attempt ("Punching :port" line).
+
+Attempt: simultaneous TCP open (both peers dial each other's publicpunch endpoints from their listen ports, retried for 60s; rolesdeterministically assigned by fingerprint order; identity-proof ataccept). Control test on one machine: PASSED — mechanics verified.
+
+Result: DIRECT P2P FAILED. Neither NAT delivered the peer's SYNs.Analysis: hotspot side is carrier-grade NAT (public IP shared acrosssubscribers; endpoint-dependent mapping or inbound filtering highlylikely). Home NAT additionally drops unsolicited inbound. Simultaneousopen cannot conjure a mapping a symmetric/CGNAT device refuses tocreate.
+
+Prior baseline (uncoordinated direct dial): also failed withWinError 10060 (~20s timeout) — unsolicited inbound SYN dropped byNAT A.
+
+Conclusion (three-tier evidence): uncoordinated dial fails →coordinated punch fails on home↔CGNAT → loopback control passes(code correctness). The limitation is the network, not theimplementation.
+
+V1 outcome per the fixed definition: real traversal attempt executed,result measured, failure explained at the NAT level, fallback strategydocumented. Milestone COMPLETE. Relay implementation is V2.
