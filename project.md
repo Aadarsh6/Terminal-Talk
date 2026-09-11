@@ -545,3 +545,8 @@ Prior baseline (uncoordinated direct dial): also failed withWinError 10060 (~20s
 Conclusion (three-tier evidence): uncoordinated dial fails →coordinated punch fails on home↔CGNAT → loopback control passes(code correctness). The limitation is the network, not theimplementation.
 
 V1 outcome per the fixed definition: real traversal attempt executed,result measured, failure explained at the NAT level, fallback strategydocumented. Milestone COMPLETE. Relay implementation is V2.
+
+
+
+ # **"V1 done"**
+"I built a P2P encrypted messenger from raw Python sockets — custom framing, cryptographic identities, fingerprint verification, encrypted SQLite history, peer discovery via a cloud rendezvous I deployed, and I ran a real NAT traversal experiment across carrier-grade NAT, measured the failure, and documented why relays are necessary."
