@@ -201,77 +201,96 @@ def rendezvous_lookup(peer_id, rv_host):
 
 def punch_mode(my_id, peer_id, my_port, rv_host):
     private_key = load_or_create_key(f"{my_id}_key.bin")
-    own_fp = format_fingerprint(bytes(private_key.public_key))
+    own_public = bytes(private_key.public_key)
+    own_fp = format_fingerprint(own_public)
 
     if rendezvous_register(private_key, my_id, my_port, rv_host) is None:
         print("Rendezvous unreachable — cannot punch")
         return
 
-    target = rendezvous_lookup(peer_id, rv_host)   # small helper, below
+    target = rendezvous_lookup(peer_id, rv_host)
     if target is None or target.get("status") != "found":
-        print(f"'{peer_id}' not registered yet")
+        print(f"'{peer_id}' not registered yet — start them first, wait, then rerun")
         return
 
     t_ip = target["ip"]
     t_port = target.get("punch_port") or target["port"]
-    peer_fp = target["fingerprint"]
-    i_am_connector = own_fp.replace(":", "") < peer_fp.replace(":", "")
+    peer_fp_clean = target["fingerprint"].replace(":", "")
+    i_am_connector = own_fp.replace(":", "") < peer_fp_clean
 
     print(f"Punching {t_ip}:{t_port} for 60s — start the other side too!")
-    print("My role:", "connector (I dial out)" if i_am_connector else "accepter (I wait)")
+    print("My role:", "connector (I dial)" if i_am_connector else "accepter (I wait)")
 
-    # listener: takes the peer's inbound punch
-    accepted = []
+    winner = None
+    verified = []   # (conn, peer_public_bytes) once identity is proven
     listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
     listener.bind(("0.0.0.0", my_port))
     listener.listen()
 
-    def accepter():
-        while not accepted:
+    deadline = time.time() + 60
+
+    def try_accept():
+        # Accept connections until one PROVES it is the peer by sending
+        # the public key whose fingerprint we looked up. Anything else
+        # (stale attempt, duplicate process) is closed, not trusted.
+        while time.time() < deadline and not verified:
             try:
                 conn, _ = listener.accept()
-                accepted.append(conn)
             except OSError:
                 return
-    threading.Thread(target=accepter, daemon=True).start()
+            proof = recv_message(conn)
+            if proof is not None and hashlib.sha256(proof).hexdigest() == peer_fp_clean:
+                verified.append((conn, proof))
+            else:
+                conn.close()   # junk or stale connection — drop it
 
-    winner = None
-    last_outbound = None
-    deadline = time.time() + 60
+    threading.Thread(target=try_accept, daemon=True).start()
+
     while time.time() < deadline and winner is None:
         if i_am_connector:
             s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            s.bind(("0.0.0.0", my_port))     # THE punch: same port every attempt
+            s.bind(("0.0.0.0", my_port))
             s.settimeout(2)
             try:
                 s.connect((t_ip, t_port))
+                send_message(s, own_public)   # identify ourselves IMMEDIATELY
                 winner = s
             except OSError:
-                last_outbound = s            # keep the newest attempt alive (NAT mapping)
-        else:
-            if accepted:
-                winner = accepted[0]
-                break
+                pass   # fresh socket next iteration
+        elif verified:
+            winner = verified[0][0]
+            break
         time.sleep(0.5)
 
     listener.close()
+
     if winner is None:
         print("Punch failed after 60s — that is the measured result. Screenshot it.")
         return
 
-    print("PUNCHED THROUGH!")
+    winner.settimeout(None)   # chat sockets must block, not time out
+    print("PUNCHED THROUGH!", winner.getsockname(), "->", winner.getpeername())
 
-    box, verified_fp = handshake(winner, private_key, initiator=i_am_connector)
-    if box is None:
-        print("Peer vanished after punch")
-        return
-    if not verify_fingerprints(own_fp, verified_fp):
+    if i_am_connector:
+        peer_bytes = recv_message(winner)          # accepter answers with its key
+        if peer_bytes is None or hashlib.sha256(peer_bytes).hexdigest() != peer_fp_clean:
+            print("Peer identity mismatch after punch — closing.")
+            winner.close()
+            return
+        peer_public = peer_bytes
+    else:
+        send_message(winner, own_public)           # answer the proof
+        peer_public = verified[0][1]               # already verified at accept
+
+    box = Box(private_key, PublicKey(peer_public))
+
+    if not verify_fingerprints(own_fp, format_fingerprint(peer_public)):
         print("Fingerprint mismatch — closing.")
         winner.close()
         return
-    chat(winner, box, verified_fp, my_id)
+    chat(winner, box, format_fingerprint(peer_public), my_id)
 
 
 
