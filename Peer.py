@@ -186,6 +186,68 @@ def rendezvous_register(private_key, name, listen_port, rv_host):
     except OSError:
         return None
 
+def punch_mode(peer_id, my_port, rv_host):
+    private_key = load_or_create_key(f"punch_{my_port}.bin")
+
+    if rendezvous_register(private_key, f"punch{my_port}", my_port, rv_host) is None:
+        print("Rendezvous unreachable — cannot punch")
+        return
+
+    # 2. Learn the target's public punch endpoint
+    try:
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.settimeout(5)
+        sock.connect((rv_host, RENDEZVOUS_PORT))
+        send_message(sock, json.dumps({"type": "lookup", "id": peer_id}).encode())
+        resp_raw = recv_message(sock)
+        sock.close()
+    except OSError:
+        print("Rendezvous unreachable during lookup")
+        return
+    if resp_raw is None:
+        print("Rendezvous closed the connection")
+        return
+    target = json.loads(resp_raw.decode())
+    if target.get("status") != "found":
+        print(f"'{peer_id}' not registered yet")
+        return
+
+    t_ip, t_port = target["ip"], target["punch_port"]
+    own_fp = format_fingerprint(bytes(private_key.public_key))
+    peer_fp = target["fingerprint"]
+    print(f"Punching {t_ip}:{t_port} — retrying for 60s. Other side must start too.")
+
+    # 3. Simultaneous open: connect FROM our listen port TO their punch port
+    punch = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    punch.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    punch.bind(("0.0.0.0", my_port))
+
+    deadline = time.time() + 60
+    while time.time() < deadline:
+        try:
+            punch.connect((t_ip, t_port))
+            print(f"PUNCHED THROUGH! Connected to {t_ip}:{t_port}")
+            break
+        except OSError:
+            time.sleep(1)   # our SYN keeps our NAT mapping alive; retry until theirs arrives
+    else:
+        print("Punch failed after 60s — NAT(s) refused/dropped. That is the measured result.")
+        punch.close()
+        return
+
+    # 4. Deterministic roles: lower fingerprint sends its key first
+    initiator = own_fp.replace(":", "") < peer_fp.replace(":", "")
+    box, verified_fp = handshake(punch, private_key, initiator=initiator)
+    if box is None:
+        print("Peer vanished after punch")
+        return
+    if not verify_fingerprints(own_fp, verified_fp):
+        print("Fingerprint mismatch — closing.")
+        punch.close()
+        return
+    chat(punch, box, verified_fp, f"punch{my_port}")
+
+
 
 def rendezvous_refresh_loop(private_key, name, listen_port, rv_host):
     while True:
