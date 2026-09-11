@@ -174,6 +174,9 @@ def rendezvous_register(private_key, name, listen_port, rv_host):
     }
     try:
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        sock.bind(("0.0.0.0", listen_port)) # punch trick: register FROM our listen port,
+                                            # so the server observes the NAT mapping for it
         sock.settimeout(5)
         sock.connect((rv_host, RENDEZVOUS_PORT))
         send_message(sock, json.dumps(request).encode())
