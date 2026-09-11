@@ -373,6 +373,14 @@ def main():
             print("find requires a peer id")
             sys.exit(1)
         find_mode(sys.argv[2], sys.argv[3] if len(sys.argv) > 3 else "127.0.0.1")
+    elif sys.argv[1] == "punch":
+        if len(sys.argv) < 3:
+            print("usage: python peer.py punch <peer_id> [my_port] [rv_host]")
+            sys.exit(1)
+        peer_id = sys.argv[2]
+        my_port = int(sys.argv[3]) if len(sys.argv) > 3 else 9999
+        rv = sys.argv[4] if len(sys.argv) > 4 else "127.0.0.1"
+        punch_mode(peer_id, my_port, rv)
     else:
         print("unknown mode:", sys.argv[1])
         sys.exit(1)
