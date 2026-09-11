@@ -50,8 +50,9 @@ def handle(conn, addr):
 
             with registry_lock:
                 peers[peer_id] = {
-                    "ip": addr[0],               # OBSERVED: who we see connecting
-                    "listen_port": listen_port,  # ADVERTISED: where they accept P2P
+                    "ip": addr[0],
+                    "listen_port": listen_port,
+                    "observed_port": addr[1],    # NEW: NAT's external port for THIS peer's listen port
                     "public_key": public_key_b64,
                     "fingerprint": fingerprint,
                     "last_seen": time.time(),
@@ -68,6 +69,7 @@ def handle(conn, addr):
                     "status": "found",
                     "ip": rec["ip"],
                     "port": rec["listen_port"],
+                    "punch_port": rec["observed_port"],   # NEW
                     "fingerprint": rec["fingerprint"],
                 }
             else:
